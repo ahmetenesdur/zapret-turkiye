@@ -153,5 +153,5 @@ Strateji çalışmayı bıraktığında veya ayda bir:
 
 - Bundle: [Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)
 - Son sürüm: [releases/latest](https://github.com/Flowseal/zapret-discord-youtube/releases/latest)
-- Sorunlar: [issues](https://github.com/Flowseal/zapret-discord-youtube/issues)
+- Sorunlar: [issues](https://github.com/ahmetenesdur/zapret-turkiye/issues)
 - Orijinal zapret: [bol-van/zapret](https://github.com/bol-van/zapret)
