@@ -5,7 +5,7 @@
 :: https://github.com/ahmetenesdur/zapret-turkiye
 :: =====================================================
 setlocal EnableDelayedExpansion
-set "VERSION=1.1"
+set "VERSION=1.2"
 set "ZAPRET_PATH=C:\zapret"
 set "LOG=%ZAPRET_PATH%\install.log"
 
@@ -88,7 +88,7 @@ echo     [2/7] Son surumu indirme (GitHub)
 echo     [3/7] Dosyalari cikarma (C:\zapret)
 echo     [4/7] Defender dislamasi
 echo     [5/7] Cakisma temizleme
-echo     [6/7] Strateji testi (2-5 dk)
+echo     [6/7] Strateji testi (3 fazli)
 echo     [7/7] Servis kurulumu
 echo.
 
@@ -218,59 +218,234 @@ call :PrintStepN "5" "7" "Cakismalar kontrol ediliyor..."
 call :StopConflicts
 echo.
 
-:: ----- ADIM 6: STRATEJI TESTI -----
+:: ----- ADIM 6: STRATEJI TESTI (3 FAZLI) -----
 :install_step6
 call :PrintStepN "6" "7" "En iyi strateji araniyor..."
 echo.
-call :PrintYellow "  Bu adim ISP baglantisina gore 2-5 dakika surebilir."
+
+:: ==================== FAZ 1 ====================
+call :PrintYellow "  Faz 1: Turkiye stratejileri + bundle (2-5 dk)"
 echo.
 
 set "S6=%TEMP%\zapret_s6.ps1"
 del "%S6%" 2>nul
 >"%S6%"  echo $ProgressPreference = 'SilentlyContinue'
 >>"%S6%" echo $zapret = 'C:\zapret'
->>"%S6%" echo $strategies = Get-ChildItem "$zapret\*.bat" ^| Where-Object { $_.Name -notlike 'service*' } ^| Sort-Object Name
->>"%S6%" echo $total = $strategies.Count
->>"%S6%" echo Write-Host "  $total strateji bulundu, test basliyor..." -ForegroundColor Gray
->>"%S6%" echo Write-Host ''
->>"%S6%" echo $best = $null
->>"%S6%" echo $i = 0
+>>"%S6%" echo $winws = "$zapret\bin\winws.exe"
+>>"%S6%" echo $lists = "$zapret\lists\"
+>>"%S6%" echo $hl = "`"$($lists)list-general.txt`""
 >>"%S6%" echo $sw = [System.Diagnostics.Stopwatch]::StartNew()
->>"%S6%" echo foreach ($bat in $strategies) {
+>>"%S6%" echo function Test-Strat($label, $args) {
+>>"%S6%" echo     Write-Host "  $label..." -NoNewline
+>>"%S6%" echo     try { Start-Process -FilePath $winws -ArgumentList $args -WindowStyle Hidden -ErrorAction Stop } catch { Write-Host ' ATLANDI' -ForegroundColor DarkGray; return $false }
+>>"%S6%" echo     Start-Sleep -Seconds 5
+>>"%S6%" echo     $ok = $false
+>>"%S6%" echo     try { $r = Invoke-WebRequest 'https://discord.com/api/v10/gateway' -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop; if ($r.StatusCode -eq 200) { $ok = $true } } catch {}
+>>"%S6%" echo     Get-Process -Name 'winws' -ErrorAction SilentlyContinue ^| Stop-Process -Force
+>>"%S6%" echo     Start-Sleep -Seconds 1
+>>"%S6%" echo     if ($ok) { Write-Host ' BASARILI' -ForegroundColor Green } else { Write-Host ' -' -ForegroundColor DarkGray }
+>>"%S6%" echo     return $ok
+>>"%S6%" echo }
+>>"%S6%" echo # --- ISP presetleri (topluluk tarafindan test edilmis) ---
+>>"%S6%" echo $trStrats = @(
+>>"%S6%" echo   @{ N='Turk Telekom';              A="--wf-tcp=80,443 --wf-udp=443,50000,50100 --dpi-desync=fake --dpi-desync-ttl=4" },
+>>"%S6%" echo   @{ N='Turk Telekom (ALT)';         A="--wf-tcp=80,443 --wf-udp=443,50000,50100 --dpi-desync=fake --dpi-desync-ttl=3" },
+>>"%S6%" echo   @{ N='SuperOnline';                A="--wf-tcp=80,443 --wf-udp=443,50000,50100 --dpi-desync=fake --dpi-desync-fooling=md5sig" },
+>>"%S6%" echo   @{ N='SuperOnline (ALT)';           A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --dpi-desync=fake --dpi-desync-fooling=md5sig --dpi-desync-ttl=3" },
+>>"%S6%" echo   @{ N='Kablonet';                   A="--wf-tcp=80,443 --wf-udp=443,50000,50100 --dpi-desync=fake --dpi-desync-ttl=4" },
+>>"%S6%" echo   @{ N='Turkcell Hotspot';            A="--wf-tcp=80,443 --wf-udp=443,50000,50100 --dpi-desync=fake --dpi-desync-ttl=1 --dpi-desync-autottl=3" },
+>>"%S6%" echo   @{ N='Vodafone Hotspot';            A="--wf-tcp=80,443 --wf-udp=443,50000,50100 --dpi-desync=multisplit --dpi-desync-split-pos=2" },
+>>"%S6%" echo   # --- Genel Turkiye stratejileri ---
+>>"%S6%" echo   @{ N='turkey-genel-1 (fake+multisplit)';   A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=11 --new --filter-tcp=443 --hostlist=$hl --dpi-desync=multisplit --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11" },
+>>"%S6%" echo   @{ N='turkey-genel-2 (fakedsplit)';        A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=8 --new --filter-tcp=443 --hostlist=$hl --dpi-desync=fakedsplit --dpi-desync-split-pos=2 --dpi-desync-repeats=8" },
+>>"%S6%" echo   @{ N='turkey-genel-3 (split2)';            A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=11 --new --filter-tcp=443 --hostlist=$hl --dpi-desync=split2 --dpi-desync-split-pos=2 --dpi-desync-repeats=11" },
+>>"%S6%" echo   @{ N='turkey-genel-4 (fake+ttl4)';         A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-ttl=4 --new --filter-tcp=443 --hostlist=$hl --dpi-desync=multisplit --dpi-desync-split-pos=midsld --dpi-desync-repeats=6" },
+>>"%S6%" echo   @{ N='turkey-genel-5 (disorder2)';         A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=8 --new --filter-tcp=443 --hostlist=$hl --dpi-desync=disorder2 --dpi-desync-split-pos=2 --dpi-desync-repeats=8" },
+>>"%S6%" echo   @{ N='turkey-genel-6 (fakedsplit+sniext)'; A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=11 --new --filter-tcp=443 --hostlist=$hl --dpi-desync=fakedsplit --dpi-desync-split-pos=1,sniext+1 --dpi-desync-repeats=11" },
+>>"%S6%" echo   @{ N='turkey-genel-7 (multisplit+badseq)'; A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=6 --dpi-desync-fooling=badseq --new --filter-tcp=443 --hostlist=$hl --dpi-desync=multisplit --dpi-desync-split-pos=2 --dpi-desync-repeats=6" },
+>>"%S6%" echo   @{ N='turkey-genel-8 (autottl+md5sig)';    A="--wf-tcp=80,443 --wf-udp=443,50000-50099 --filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=11 --dpi-desync-autottl --new --filter-tcp=443 --hostlist=$hl --dpi-desync=multisplit --dpi-desync-split-pos=1,midsld --dpi-desync-repeats=11 --dpi-desync-fooling=md5sig" }
+>>"%S6%" echo )
+>>"%S6%" echo $total = $trStrats.Count
+>>"%S6%" echo Write-Host "  $total Turkiye stratejisi test ediliyor..." -ForegroundColor Gray
+>>"%S6%" echo $i = 0
+>>"%S6%" echo foreach ($s in $trStrats) {
 >>"%S6%" echo     $i++
->>"%S6%" echo     Write-Host "  [$i/$total] $($bat.Name)..." -NoNewline
->>"%S6%" echo     try { $proc = Start-Process -FilePath $bat.FullName -PassThru -WindowStyle Hidden -ErrorAction Stop } catch { Write-Host ' ATLANDI' -ForegroundColor DarkGray; continue }
->>"%S6%" echo     Start-Sleep -Seconds 4
+>>"%S6%" echo     if (Test-Strat "[$i/$total] $($s.N)" $s.A) {
+>>"%S6%" echo         Set-Content "$env:TEMP\zapret_best.txt" -Value $s.N -NoNewline
+>>"%S6%" echo         Set-Content "$env:TEMP\zapret_best_args.txt" -Value $s.A -NoNewline
+>>"%S6%" echo         $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6%" echo         Write-Host ''; Write-Host "  Sonuc: $i/$total denendi, sure: $el" -ForegroundColor Gray
+>>"%S6%" echo         Write-Host "  Calisan strateji: $($s.N)" -ForegroundColor Green
+>>"%S6%" echo         exit 0
+>>"%S6%" echo     }
+>>"%S6%" echo }
+>>"%S6%" echo # --- Bundle stratejileri ---
+>>"%S6%" echo $bats = Get-ChildItem "$zapret\*.bat" ^| Where-Object { $_.Name -notlike 'service*' } ^| Sort-Object Name
+>>"%S6%" echo $total2 = $bats.Count
+>>"%S6%" echo Write-Host ''; Write-Host "  $total2 bundle stratejisi deneniyor..." -ForegroundColor Gray
+>>"%S6%" echo $i = 0
+>>"%S6%" echo foreach ($bat in $bats) {
+>>"%S6%" echo     $i++
+>>"%S6%" echo     Write-Host "  [$i/$total2] $($bat.Name)..." -NoNewline
+>>"%S6%" echo     try { Start-Process -FilePath $bat.FullName -PassThru -WindowStyle Hidden -ErrorAction Stop } catch { Write-Host ' ATLANDI' -ForegroundColor DarkGray; continue }
+>>"%S6%" echo     Start-Sleep -Seconds 5
 >>"%S6%" echo     $ok = $false
 >>"%S6%" echo     try { $r = Invoke-WebRequest 'https://discord.com/api/v10/gateway' -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop; if ($r.StatusCode -eq 200) { $ok = $true } } catch {}
 >>"%S6%" echo     Get-Process -Name 'winws' -ErrorAction SilentlyContinue ^| Stop-Process -Force
 >>"%S6%" echo     Start-Sleep -Seconds 1
 >>"%S6%" echo     if ($ok) {
 >>"%S6%" echo         Write-Host ' BASARILI' -ForegroundColor Green
->>"%S6%" echo         $best = $bat.Name
->>"%S6%" echo         break
->>"%S6%" echo     } else {
->>"%S6%" echo         Write-Host ' -' -ForegroundColor DarkGray
->>"%S6%" echo     }
+>>"%S6%" echo         Set-Content "$env:TEMP\zapret_best.txt" -Value $bat.Name -NoNewline
+>>"%S6%" echo         Remove-Item "$env:TEMP\zapret_best_args.txt" -ErrorAction SilentlyContinue
+>>"%S6%" echo         $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6%" echo         Write-Host ''; Write-Host "  Sonuc: sure: $el" -ForegroundColor Gray
+>>"%S6%" echo         Write-Host "  Calisan strateji: $($bat.Name)" -ForegroundColor Green
+>>"%S6%" echo         exit 0
+>>"%S6%" echo     } else { Write-Host ' -' -ForegroundColor DarkGray }
 >>"%S6%" echo }
->>"%S6%" echo $sw.Stop()
->>"%S6%" echo $elapsed = '{0:mm\:ss}' -f $sw.Elapsed
->>"%S6%" echo Write-Host ''
->>"%S6%" echo if ($best) {
->>"%S6%" echo     Set-Content -Path "$env:TEMP\zapret_best.txt" -Value $best -NoNewline
->>"%S6%" echo     Write-Host "  Sonuc: $i/$total strateji denendi, sure: $elapsed" -ForegroundColor Gray
->>"%S6%" echo     Write-Host "  En iyi strateji: $best" -ForegroundColor Green
->>"%S6%" echo } else {
->>"%S6%" echo     Write-Host "  Sonuc: $total/$total strateji denendi, sure: $elapsed" -ForegroundColor Gray
->>"%S6%" echo     Write-Host '  Hicbir strateji calismadi.' -ForegroundColor Red
->>"%S6%" echo     Write-Host '  Sorun Gider (menu 4) ile kontrol et.' -ForegroundColor Yellow
->>"%S6%" echo     exit 1
->>"%S6%" echo }
+>>"%S6%" echo $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6%" echo Write-Host ''; Write-Host "  Faz 1 tamamlandi ($el) - calisan strateji bulunamadi." -ForegroundColor Yellow
+>>"%S6%" echo exit 1
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%S6%"
-if errorlevel 1 (del "%S6%" 2>nul & call :Bekle & goto menu)
 del "%S6%" 2>nul
 
+:: Faz 1 basariliysa devam
+if not errorlevel 1 goto step6_done
+
+:: ==================== FAZ 2 ====================
+echo.
+choice /C EH /N /M "  Faz 2: Parametre taramasi yapmak ister misin? (5-10 dk) (E/H): "
+if errorlevel 2 goto step6_fail
+
+echo.
+call :PrintYellow "  Faz 2: Akilli parametre taramasi baslatiliyor..."
+echo.
+
+set "S6B=%TEMP%\zapret_s6b.ps1"
+del "%S6B%" 2>nul
+>"%S6B%"  echo $ProgressPreference = 'SilentlyContinue'
+>>"%S6B%" echo $zapret = 'C:\zapret'
+>>"%S6B%" echo $winws = "$zapret\bin\winws.exe"
+>>"%S6B%" echo $hl = "`"$zapret\lists\list-general.txt`""
+>>"%S6B%" echo function Test-Strat($label, $args) {
+>>"%S6B%" echo     Write-Host "  $label..." -NoNewline
+>>"%S6B%" echo     try { Start-Process -FilePath $winws -ArgumentList $args -WindowStyle Hidden -ErrorAction Stop } catch { Write-Host ' ATLANDI' -ForegroundColor DarkGray; return $false }
+>>"%S6B%" echo     Start-Sleep -Seconds 5
+>>"%S6B%" echo     $ok = $false
+>>"%S6B%" echo     try { $r = Invoke-WebRequest 'https://discord.com/api/v10/gateway' -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop; if ($r.StatusCode -eq 200) { $ok = $true } } catch {}
+>>"%S6B%" echo     Get-Process -Name 'winws' -ErrorAction SilentlyContinue ^| Stop-Process -Force
+>>"%S6B%" echo     Start-Sleep -Seconds 1
+>>"%S6B%" echo     if ($ok) { Write-Host ' BASARILI' -ForegroundColor Green } else { Write-Host ' -' -ForegroundColor DarkGray }
+>>"%S6B%" echo     return $ok
+>>"%S6B%" echo }
+>>"%S6B%" echo $combos = @()
+>>"%S6B%" echo $modes = @('fake','multisplit','fakedsplit','split2','disorder2')
+>>"%S6B%" echo $splits = @('2','1,midsld','midsld','sniext+1')
+>>"%S6B%" echo $reps = @(6,11)
+>>"%S6B%" echo foreach ($m in $modes) { foreach ($sp in $splits) { foreach ($rp in $reps) {
+>>"%S6B%" echo     $desc = "$m-$sp-r$rp"
+>>"%S6B%" echo     $tcp = "--filter-tcp=443 --hostlist=$hl --dpi-desync=$m --dpi-desync-split-pos=$sp --dpi-desync-repeats=$rp"
+>>"%S6B%" echo     $udp = "--filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=$rp"
+>>"%S6B%" echo     $full = "--wf-tcp=80,443 --wf-udp=443,50000-50099 $udp --new $tcp"
+>>"%S6B%" echo     $combos += @{ N=$desc; A=$full }
+>>"%S6B%" echo } } }
+>>"%S6B%" echo $total = $combos.Count
+>>"%S6B%" echo Write-Host "  $total kombinasyon test edilecek..." -ForegroundColor Gray
+>>"%S6B%" echo $sw = [System.Diagnostics.Stopwatch]::StartNew()
+>>"%S6B%" echo $i = 0
+>>"%S6B%" echo foreach ($c in $combos) {
+>>"%S6B%" echo     $i++
+>>"%S6B%" echo     if (Test-Strat "[$i/$total] $($c.N)" $c.A) {
+>>"%S6B%" echo         Set-Content "$env:TEMP\zapret_best.txt" -Value "sweep: $($c.N)" -NoNewline
+>>"%S6B%" echo         Set-Content "$env:TEMP\zapret_best_args.txt" -Value $c.A -NoNewline
+>>"%S6B%" echo         $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6B%" echo         Write-Host ''; Write-Host "  Sonuc: $i/$total denendi, sure: $el" -ForegroundColor Gray
+>>"%S6B%" echo         Write-Host "  Calisan kombinasyon: $($c.N)" -ForegroundColor Green
+>>"%S6B%" echo         exit 0
+>>"%S6B%" echo     }
+>>"%S6B%" echo }
+>>"%S6B%" echo $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6B%" echo Write-Host ''; Write-Host "  Faz 2 tamamlandi ($el) - calisan kombinasyon bulunamadi." -ForegroundColor Yellow
+>>"%S6B%" echo exit 1
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%S6B%"
+del "%S6B%" 2>nul
+
+if not errorlevel 1 goto step6_done
+
+:: ==================== FAZ 3 ====================
+echo.
+choice /C EH /N /M "  Faz 3: Genisletilmis tarama yapmak ister misin? (10-20 dk) (E/H): "
+if errorlevel 2 goto step6_fail
+
+echo.
+call :PrintYellow "  Faz 3: Genisletilmis tarama (nadir parametreler)..."
+echo.
+
+set "S6C=%TEMP%\zapret_s6c.ps1"
+del "%S6C%" 2>nul
+>"%S6C%"  echo $ProgressPreference = 'SilentlyContinue'
+>>"%S6C%" echo $zapret = 'C:\zapret'
+>>"%S6C%" echo $winws = "$zapret\bin\winws.exe"
+>>"%S6C%" echo $hl = "`"$zapret\lists\list-general.txt`""
+>>"%S6C%" echo function Test-Strat($label, $args) {
+>>"%S6C%" echo     Write-Host "  $label..." -NoNewline
+>>"%S6C%" echo     try { Start-Process -FilePath $winws -ArgumentList $args -WindowStyle Hidden -ErrorAction Stop } catch { Write-Host ' ATLANDI' -ForegroundColor DarkGray; return $false }
+>>"%S6C%" echo     Start-Sleep -Seconds 5
+>>"%S6C%" echo     $ok = $false
+>>"%S6C%" echo     try { $r = Invoke-WebRequest 'https://discord.com/api/v10/gateway' -TimeoutSec 8 -UseBasicParsing -ErrorAction Stop; if ($r.StatusCode -eq 200) { $ok = $true } } catch {}
+>>"%S6C%" echo     Get-Process -Name 'winws' -ErrorAction SilentlyContinue ^| Stop-Process -Force
+>>"%S6C%" echo     Start-Sleep -Seconds 1
+>>"%S6C%" echo     if ($ok) { Write-Host ' BASARILI' -ForegroundColor Green } else { Write-Host ' -' -ForegroundColor DarkGray }
+>>"%S6C%" echo     return $ok
+>>"%S6C%" echo }
+>>"%S6C%" echo $combos = @()
+>>"%S6C%" echo $modes = @('fake','multisplit','fakedsplit','split2','disorder2')
+>>"%S6C%" echo $splits = @('2','1,midsld','midsld','sniext+1','3','1,sniext+1')
+>>"%S6C%" echo $reps = @(4,6,8,11)
+>>"%S6C%" echo $foolings = @('','badseq','md5sig')
+>>"%S6C%" echo foreach ($m in $modes) { foreach ($sp in $splits) { foreach ($rp in $reps) { foreach ($f in $foolings) {
+>>"%S6C%" echo     $desc = "$m-$sp-r$rp"; if ($f) { $desc += "-$f" }
+>>"%S6C%" echo     $tcp = "--filter-tcp=443 --hostlist=$hl --dpi-desync=$m --dpi-desync-split-pos=$sp --dpi-desync-repeats=$rp"
+>>"%S6C%" echo     if ($f) { $tcp += " --dpi-desync-fooling=$f" }
+>>"%S6C%" echo     $udp = "--filter-udp=443 --hostlist=$hl --dpi-desync=fake --dpi-desync-repeats=$rp"
+>>"%S6C%" echo     $full = "--wf-tcp=80,443 --wf-udp=443,50000-50099 $udp --new $tcp"
+>>"%S6C%" echo     $combos += @{ N=$desc; A=$full }
+>>"%S6C%" echo } } } }
+>>"%S6C%" echo $total = $combos.Count
+>>"%S6C%" echo Write-Host "  $total kombinasyon test edilecek..." -ForegroundColor Gray
+>>"%S6C%" echo $sw = [System.Diagnostics.Stopwatch]::StartNew()
+>>"%S6C%" echo $i = 0
+>>"%S6C%" echo foreach ($c in $combos) {
+>>"%S6C%" echo     $i++
+>>"%S6C%" echo     if (Test-Strat "[$i/$total] $($c.N)" $c.A) {
+>>"%S6C%" echo         Set-Content "$env:TEMP\zapret_best.txt" -Value "sweep: $($c.N)" -NoNewline
+>>"%S6C%" echo         Set-Content "$env:TEMP\zapret_best_args.txt" -Value $c.A -NoNewline
+>>"%S6C%" echo         $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6C%" echo         Write-Host ''; Write-Host "  Sonuc: $i/$total denendi, sure: $el" -ForegroundColor Gray
+>>"%S6C%" echo         Write-Host "  Calisan kombinasyon: $($c.N)" -ForegroundColor Green
+>>"%S6C%" echo         exit 0
+>>"%S6C%" echo     }
+>>"%S6C%" echo }
+>>"%S6C%" echo $sw.Stop(); $el = '{0:mm\:ss}' -f $sw.Elapsed
+>>"%S6C%" echo Write-Host ''; Write-Host "  Faz 3 tamamlandi ($el) - calisan kombinasyon bulunamadi." -ForegroundColor Red
+>>"%S6C%" echo exit 1
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%S6C%"
+del "%S6C%" 2>nul
+
+if not errorlevel 1 goto step6_done
+
+:step6_fail
+echo.
+call :PrintRed "  Hicbir strateji calismadi."
+call :PrintYellow "  Sorun Gider (menu 4) ile kontrol et."
+echo.
+call :Bekle
+goto menu
+
+:step6_done
 set /p BEST_STRATEGY=<"%TEMP%\zapret_best.txt"
 del "%TEMP%\zapret_best.txt" 2>nul
 echo.
@@ -286,30 +461,37 @@ del "%S7%" 2>nul
 >>"%S7%" echo $zapret = 'C:\zapret'
 >>"%S7%" echo $binPath = "$zapret\bin\"
 >>"%S7%" echo $listsPath = "$zapret\lists\"
->>"%S7%" echo # BAT dosyasindan winws.exe argumanlari cikar
->>"%S7%" echo $lines = Get-Content "$zapret\$best"
->>"%S7%" echo $capture = $false
->>"%S7%" echo $parts = @()
->>"%S7%" echo foreach ($line in $lines) {
->>"%S7%" echo     if ($line -match 'winws\.exe') {
->>"%S7%" echo         $capture = $true
->>"%S7%" echo         $p = $line -replace '^.*winws\.exe[\"'']?\s*', ''
->>"%S7%" echo         $p = $p -replace '\s*\^\s*$', ''
->>"%S7%" echo         if ($p.Trim()) { $parts += $p.Trim() }
->>"%S7%" echo     } elseif ($capture) {
->>"%S7%" echo         $c = $line.Trim() -replace '\s*\^\s*$', ''
->>"%S7%" echo         if ($c) { $parts += $c }
->>"%S7%" echo         if ($line -notmatch '\^\s*$') { $capture = $false }
+>>"%S7%" echo # Dogrudan parametre dosyasi varsa kullan (turkey/sweep stratejileri)
+>>"%S7%" echo $argsFile = "$env:TEMP\zapret_best_args.txt"
+>>"%S7%" echo if (Test-Path $argsFile) {
+>>"%S7%" echo     $finalArgs = Get-Content $argsFile -ErrorAction Stop
+>>"%S7%" echo     Remove-Item $argsFile -ErrorAction SilentlyContinue
+>>"%S7%" echo     Write-Host '  Dogrudan parametreler kullaniliyor' -ForegroundColor Gray
+>>"%S7%" echo } else {
+>>"%S7%" echo     # BAT dosyasindan winws.exe argumanlari cikar
+>>"%S7%" echo     $lines = Get-Content "$zapret\$best"
+>>"%S7%" echo     $capture = $false
+>>"%S7%" echo     $parts = @()
+>>"%S7%" echo     foreach ($line in $lines) {
+>>"%S7%" echo         if ($line -match 'winws\.exe') {
+>>"%S7%" echo             $capture = $true
+>>"%S7%" echo             $p = $line -replace '^.*winws\.exe[\"'']?\s*', ''
+>>"%S7%" echo             $p = $p -replace '\s*\^\s*$', ''
+>>"%S7%" echo             if ($p.Trim()) { $parts += $p.Trim() }
+>>"%S7%" echo         } elseif ($capture) {
+>>"%S7%" echo             $c = $line.Trim() -replace '\s*\^\s*$', ''
+>>"%S7%" echo             if ($c) { $parts += $c }
+>>"%S7%" echo             if ($line -notmatch '\^\s*$') { $capture = $false }
+>>"%S7%" echo         }
 >>"%S7%" echo     }
+>>"%S7%" echo     $finalArgs = ($parts -join ' ')
+>>"%S7%" echo     # Path ve filtre degiskenlerini gercek degerlerle degistir
+>>"%S7%" echo     $finalArgs = $finalArgs -replace '%%BIN%%', $binPath
+>>"%S7%" echo     $finalArgs = $finalArgs -replace '%%LISTS%%', $listsPath
+>>"%S7%" echo     $finalArgs = $finalArgs -replace '%%GameFilter%%', '12'
+>>"%S7%" echo     $finalArgs = $finalArgs -replace '%%GameFilterTCP%%', '12'
+>>"%S7%" echo     $finalArgs = $finalArgs -replace '%%GameFilterUDP%%', '12'
 >>"%S7%" echo }
->>"%S7%" echo $finalArgs = ($parts -join ' ')
->>"%S7%" echo # Path ve filtre degiskenlerini gercek degerlerle degistir
->>"%S7%" echo $finalArgs = $finalArgs -replace '%%BIN%%', $binPath
->>"%S7%" echo $finalArgs = $finalArgs -replace '%%LISTS%%', $listsPath
->>"%S7%" echo # GameFilter: 12 = disabled (dummy port, hicbir trafigi yakalamaz)
->>"%S7%" echo $finalArgs = $finalArgs -replace '%%GameFilter%%', '12'
->>"%S7%" echo $finalArgs = $finalArgs -replace '%%GameFilterTCP%%', '12'
->>"%S7%" echo $finalArgs = $finalArgs -replace '%%GameFilterUDP%%', '12'
 >>"%S7%" echo # Servisi olustur
 >>"%S7%" echo net stop zapret 2^>$null ^| Out-Null
 >>"%S7%" echo sc.exe delete zapret 2^>$null ^| Out-Null
